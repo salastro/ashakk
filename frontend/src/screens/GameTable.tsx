@@ -191,6 +191,9 @@ export function GameTable({ roomId, playerName }: GameTableProps) {
         if (gameState.lastSubmissionPlayerId === socket.id) return false;
         // Can't doubt if you've already finished
         if (gameState.activePlayers && !gameState.activePlayers.includes(socket.id!)) return false;
+        // Can't doubt if you have no tiles (you're waiting for your last play to be accepted)
+        const myPlayer = gameState.players.find(p => p.id === socket.id);
+        if (myPlayer && myPlayer.handSize === 0) return false;
         return true;
     })();
 

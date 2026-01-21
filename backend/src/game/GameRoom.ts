@@ -278,6 +278,12 @@ export class GameRoom {
             return { success: false, error: 'Cannot doubt your own submission' };
         }
 
+        // Cannot doubt if you have no tiles (you're waiting for your last play to be accepted)
+        const doubter = this.gameState.players.find(p => p.id === playerId);
+        if (doubter && doubter.hand.length === 0) {
+            return { success: false, error: 'Cannot doubt with no tiles - waiting for your play to be accepted' };
+        }
+
         // Check if submission is valid (all tiles contain current number)
         const isValid = validateSubmission(tiles, this.gameState.currentNumber);
 
