@@ -1,0 +1,135 @@
+.controls {
+    padding: 20px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+.controls-hint {
+    margin: 0 0 16px 0;
+    color: #666;
+    font-size: 0.95rem;
+}
+
+.controls-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.control-button {
+    padding: 14px 28px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.control-button:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.control-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.control-button.primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.control-button.secondary {
+    background: #f0f0f0;
+    color: #333;
+}
+
+.control-button.doubt {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    color: white;
+}
+
+.control-button.accept {
+    background: linear-gradient(135deg, #27ae60 0%, #1e8449 100%);
+    color: white;
+}
+
+.waiting {
+    color: #999;
+    font-style: italic;
+    margin: 0;
+    padding: 16px 0;
+}
+
+.game-over {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #ffd700;
+    margin: 0;
+    padding: 16px 0;
+}
+
+.number-picker-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.number-picker {
+    background: white;
+    padding: 24px;
+    border-radius: 16px;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.number-picker h3 {
+    margin: 0 0 20px 0;
+    color: #333;
+}
+
+.number-options {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.number-option {
+    width: 50px;
+    height: 50px;
+    border: none;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-size: 1.5rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.number-option:hover {
+    transform: scale(1.1);
+}
+
+@media (max-width: 600px) {
+    .controls-buttons {
+        flex-direction: column;
+    }
+
+    .control-button {
+        width: 100%;
+    }
+}

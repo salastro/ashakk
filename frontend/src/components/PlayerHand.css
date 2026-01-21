@@ -1,0 +1,76 @@
+.player-hand {
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.player-hand h3 {
+    margin: 0 0 16px 0;
+    color: #333;
+    font-size: 1.1rem;
+}
+
+.hand-tiles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+}
+
+.tile {
+    width: 50px;
+    height: 100px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    transition: transform 0.2s, filter 0.2s;
+    position: relative;
+}
+
+.tile:hover:not(:disabled) {
+    transform: translateY(-8px);
+}
+
+.tile:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.tile.selected {
+    transform: translateY(-12px);
+    filter: drop-shadow(0 8px 16px rgba(102, 126, 234, 0.4));
+}
+
+.tile.selected .tile-svg rect {
+    stroke: #667eea;
+    stroke-width: 4;
+}
+
+.tile-svg {
+    width: 100%;
+    height: 100%;
+    color: #333;
+}
+
+.tile-label {
+    position: absolute;
+    bottom: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.7rem;
+    color: #666;
+    white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+    .tile {
+        width: 40px;
+        height: 80px;
+    }
+
+    .hand-tiles {
+        gap: 8px;
+    }
+}
