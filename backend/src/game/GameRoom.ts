@@ -26,6 +26,8 @@ export class GameRoom {
             needsNumberChoice: false,
             board: [],
             phase: 'PLAY',
+            leaderboard: [],
+            activePlayers: players.map(p => p.id),
             consecutiveNoPasses: 0,
         };
     }
@@ -51,6 +53,10 @@ export class GameRoom {
             const endIdx = startIdx + tilesPerPlayer;
             this.gameState.players[i].hand = tiles.slice(startIdx, endIdx);
         }
+
+        // Initialize active players
+        this.gameState.activePlayers = this.gameState.players.map(p => p.id);
+        this.gameState.leaderboard = [];
 
         // Find starter (player with 6|6)
         const starterIndex = findStarterIndex(this.gameState.players.map(p => p.hand));
@@ -81,7 +87,8 @@ export class GameRoom {
             lastSubmissionSize: this.gameState.lastSubmission?.tiles.length,
             lastSubmissionPlayerId: this.gameState.lastSubmission?.playerId,
             consecutiveNoPasses: this.gameState.consecutiveNoPasses,
-            winner: this.gameState.winner,
+            leaderboard: this.gameState.leaderboard,
+            activePlayers: this.gameState.activePlayers,
         };
     }
 
@@ -132,10 +139,9 @@ export class GameRoom {
         this.gameState.phase = 'PLAY';
         this.gameState.consecutiveNoPasses = 0;
 
-        // Check for win (if they only had 6|6)
+        // Check if player finished (if they only had 6|6)
         if (currentPlayer.hand.length === 0) {
-            this.gameState.phase = 'ENDED';
-            this.gameState.winner = playerId;
+            this.handlePlayerFinished(playerId);
         }
 
         return { success: true };
@@ -173,14 +179,15 @@ export class GameRoom {
         currentPlayer.hand = removeTilesFromHand(currentPlayer.hand, tiles);
         this.gameState.board.push(...tiles);
 
-        // If there was a previous submission, it's now auto-accepted (check for win)
+        // If there was a previous submission, it's now auto-accepted (check if they finished)
         if (this.gameState.lastSubmission) {
             const prevSubmitter = this.gameState.players.find(p => p.id === this.gameState.lastSubmission?.playerId);
             if (prevSubmitter && prevSubmitter.hand.length === 0) {
-                // Previous submitter has no tiles and wasn't doubted - they win!
-                this.gameState.phase = 'ENDED';
-                this.gameState.winner = this.gameState.lastSubmission.playerId;
-                return { success: true };
+                // Previous submitter has no tiles and wasn't doubted - they finished!
+                const gameEnded = this.handlePlayerFinished(this.gameState.lastSubmission.playerId);
+                if (gameEnded) {
+                    return { success: true };
+                }
             }
         }
 
@@ -212,14 +219,26 @@ export class GameRoom {
             return { success: false, error: 'Not in play phase' };
         }
 
+        // If there was a previous submission, it's now auto-accepted (check if they finished)
+        if (this.gameState.lastSubmission) {
+            const prevSubmitter = this.gameState.players.find(p => p.id === this.gameState.lastSubmission?.playerId);
+            if (prevSubmitter && prevSubmitter.hand.length === 0) {
+                // Previous submitter has no tiles and wasn't doubted - they finished!
+                const gameEnded = this.handlePlayerFinished(this.gameState.lastSubmission.playerId);
+                this.gameState.lastSubmission = undefined;
+                if (gameEnded) {
+                    return { success: true };
+                }
+            }
+        }
+
         currentPlayer.hasPassed = true;
         this.gameState.consecutiveNoPasses++;
 
-        // Check if all players consecutively claim no tile
-        if (this.gameState.consecutiveNoPasses === this.gameState.players.length) {
+        // Check if all active players consecutively claim no tile
+        if (this.gameState.consecutiveNoPasses === this.gameState.activePlayers.length) {
             // All players passed - next player chooses new number
-            const nextPlayerIndex = (this.gameState.currentPlayerIndex + 1) % this.gameState.players.length;
-            this.gameState.currentPlayerIndex = nextPlayerIndex;
+            this.advanceToNextPlayer();
             this.gameState.needsNumberChoice = true;
             this.resetPassStates();
             return { success: true, action: 'CHOOSE_NUMBER' };
@@ -275,13 +294,15 @@ export class GameRoom {
         }
         this.gameState.currentPlayerIndex = this.gameState.players.findIndex(p => p.id === nextPlayerId);
 
-        // Check if submitter wins (they played all tiles and were NOT bluffing)
+        // Check if submitter finished (they played all tiles and were NOT bluffing)
         const submitter = this.gameState.players.find(p => p.id === submitterId);
         if (isValid && submitter && submitter.hand.length === 0) {
-            // Submitter was honest and has no tiles - they win!
-            this.gameState.phase = 'ENDED';
-            this.gameState.winner = submitterId;
-            return { success: true, penalty: 'DOUBTER' };
+            // Submitter was honest and has no tiles - they finished!
+            const gameEnded = this.handlePlayerFinished(submitterId);
+            if (gameEnded) {
+                return { success: true, penalty: 'DOUBTER' };
+            }
+            // Game continues with remaining players, doubter gets penalty
         }
 
         // Apply penalty: collect all board tiles (including starter tile if present)
@@ -344,10 +365,57 @@ export class GameRoom {
     }
 
     /**
-     * Advance to the next player
+     * Advance to the next active player (skip finished players)
      */
     private advanceToNextPlayer(): void {
-        this.gameState.currentPlayerIndex = (this.gameState.currentPlayerIndex + 1) % this.gameState.players.length;
+        let nextIndex = (this.gameState.currentPlayerIndex + 1) % this.gameState.players.length;
+        let attempts = 0;
+
+        // Find next active player
+        while (!this.gameState.activePlayers.includes(this.gameState.players[nextIndex].id) && attempts < this.gameState.players.length) {
+            nextIndex = (nextIndex + 1) % this.gameState.players.length;
+            attempts++;
+        }
+
+        this.gameState.currentPlayerIndex = nextIndex;
+    }
+
+    /**
+     * Handle when a player finishes (empties their hand)
+     * Returns true if the game has ended
+     */
+    private handlePlayerFinished(playerId: string): boolean {
+        // Add to leaderboard
+        if (!this.gameState.leaderboard.includes(playerId)) {
+            this.gameState.leaderboard.push(playerId);
+        }
+
+        // Remove from active players
+        this.gameState.activePlayers = this.gameState.activePlayers.filter(id => id !== playerId);
+
+        // Clear last submission since that player finished
+        if (this.gameState.lastSubmission?.playerId === playerId) {
+            this.gameState.lastSubmission = undefined;
+        }
+
+        // Check if game should end (only 1 or 0 players left)
+        if (this.gameState.activePlayers.length <= 1) {
+            // Add remaining player to leaderboard (last place)
+            for (const id of this.gameState.activePlayers) {
+                if (!this.gameState.leaderboard.includes(id)) {
+                    this.gameState.leaderboard.push(id);
+                }
+            }
+            this.gameState.phase = 'ENDED';
+            return true;
+        } else {
+            // Game continues - advance to next active player if current player finished
+            const currentPlayer = this.gameState.players[this.gameState.currentPlayerIndex];
+            if (currentPlayer.id === playerId) {
+                this.advanceToNextPlayer();
+            }
+            return false;
+        }
     }
 
     /**

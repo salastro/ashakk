@@ -17,7 +17,8 @@ export interface GameState {
         tiles: Tile[];
     };
     phase: GamePhase;
-    winner?: string;
+    leaderboard: string[]; // Player IDs in order of finishing (first = 1st place)
+    activePlayers: string[]; // Player IDs still in the game
     consecutiveNoPasses: number;
 }
 
@@ -31,6 +32,8 @@ export function createGameState(roomId: string, players: Player[], gameMasterId:
         needsNumberChoice: false,
         board: [],
         phase: 'STARTER', // Start in STARTER phase
+        leaderboard: [],
+        activePlayers: players.map(p => p.id),
         consecutiveNoPasses: 0,
     };
 }

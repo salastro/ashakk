@@ -25,7 +25,8 @@ export interface PublicGameState {
     lastSubmissionSize?: number;
     lastSubmissionPlayerId?: string;
     consecutiveNoPasses: number;
-    winner?: string;
+    leaderboard: string[]; // Player IDs in order of finishing (first = 1st place)
+    activePlayers: string[]; // Player IDs still in the game
 }
 
 export interface PlayerGameState extends PublicGameState {
@@ -45,6 +46,12 @@ export interface DoubtResolvedEvent {
 }
 
 export interface GameEndedEvent {
-    winner: string;
+    leaderboard: string[];
+    gameState: PublicGameState;
+}
+
+export interface PlayerFinishedEvent {
+    playerId: string;
+    position: number; // 1st, 2nd, 3rd, etc.
     gameState: PublicGameState;
 }

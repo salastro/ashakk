@@ -45,13 +45,15 @@ export function setupSocketHandlers(io: SocketIOServer, registry: RoomRegistry) 
                 }
 
                 const state = room.getState();
-                if (state.phase !== 'PLAY' || state.players.length >= 4) {
+                // Can only join if game hasn't started (no hands dealt) and room not full
+                if (state.players[0]?.hand.length > 0 || state.players.length >= 4) {
                     callback({ success: false, error: 'Cannot join room' });
                     return;
                 }
 
                 const newPlayer = createPlayer(socket.id, playerName, [], socket.id);
                 state.players.push(newPlayer);
+                state.activePlayers.push(newPlayer.id); // Also add to active players
 
                 socket.join(roomId);
                 socket.emit('room:joined', { roomId, gameState: room.getPlayerGameState(socket.id) });
@@ -170,9 +172,9 @@ export function setupSocketHandlers(io: SocketIOServer, registry: RoomRegistry) 
                     }
                 });
 
-                // Check for win
+                // Check for game end
                 if (state.phase === 'ENDED') {
-                    io.to(roomId).emit('game:ended', { winner: state.winner, gameState: room.getPublicGameState() });
+                    io.to(roomId).emit('game:ended', { leaderboard: state.leaderboard, gameState: room.getPublicGameState() });
                 }
 
                 callback({ success: true });
@@ -210,6 +212,11 @@ export function setupSocketHandlers(io: SocketIOServer, registry: RoomRegistry) 
                         playerSocket.emit('game:stateUpdate', room.getPlayerGameState(p.id));
                     }
                 });
+
+                // Check for game end (player who played last tiles got accepted)
+                if (state.phase === 'ENDED') {
+                    io.to(roomId).emit('game:ended', { leaderboard: state.leaderboard, gameState: room.getPublicGameState() });
+                }
 
                 callback({ success: true });
             } catch (error) {
@@ -289,9 +296,9 @@ export function setupSocketHandlers(io: SocketIOServer, registry: RoomRegistry) 
                     }
                 });
 
-                // Check for win
+                // Check for game end
                 if (state.phase === 'ENDED') {
-                    io.to(roomId).emit('game:ended', { winner: state.winner, gameState: room.getPublicGameState() });
+                    io.to(roomId).emit('game:ended', { leaderboard: state.leaderboard, gameState: room.getPublicGameState() });
                 }
 
                 callback({ success: true });

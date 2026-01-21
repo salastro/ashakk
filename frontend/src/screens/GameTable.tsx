@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { socket } from '../socket';
 import { PlayerHand } from '../components/PlayerHand';
 import { Board } from '../components/Board';
@@ -16,6 +16,8 @@ export function GameTable({ roomId, playerName }: GameTableProps) {
     const [selectedTiles, setSelectedTiles] = useState<Tile[]>([]);
     const [notification, setNotification] = useState<string | null>(null);
     const [gameStarted, setGameStarted] = useState(false);
+    const [winnerAnnouncement, setWinnerAnnouncement] = useState<{ name: string; position: number } | null>(null);
+    const prevLeaderboardLength = useRef(0);
 
     const showNotification = useCallback((message: string) => {
         setNotification(message);
@@ -70,8 +72,7 @@ export function GameTable({ roomId, playerName }: GameTableProps) {
         });
 
         socket.on('game:ended', (event: GameEndedEvent) => {
-            const winnerName = gameState?.players.find(p => p.id === event.winner)?.name || 'Someone';
-            showNotification(`${winnerName} wins!`);
+            showNotification('🏁 Game Over! Check the leaderboard!');
         });
 
         return () => {
@@ -84,6 +85,23 @@ export function GameTable({ roomId, playerName }: GameTableProps) {
             socket.off('game:ended');
         };
     }, [showNotification, gameState?.players]);
+
+    // Show winner announcement when a player finishes (but game isn't over yet)
+    useEffect(() => {
+        if (gameState && gameState.leaderboard && gameState.leaderboard.length > prevLeaderboardLength.current) {
+            const newFinishers = gameState.leaderboard.slice(prevLeaderboardLength.current);
+            // Show announcement for each new finisher (usually just one)
+            for (const finisherId of newFinishers) {
+                const position = gameState.leaderboard.indexOf(finisherId) + 1;
+                const finisherName = gameState.players.find(p => p.id === finisherId)?.name || 'Someone';
+                // Show modal announcement
+                setWinnerAnnouncement({ name: finisherName, position });
+                // Auto-dismiss after 3 seconds
+                setTimeout(() => setWinnerAnnouncement(null), 3000);
+            }
+            prevLeaderboardLength.current = gameState.leaderboard.length;
+        }
+    }, [gameState?.leaderboard, gameState?.players]);
 
     const handleTileSelect = (tile: Tile) => {
         setSelectedTiles(prev => {
@@ -165,12 +183,15 @@ export function GameTable({ roomId, playerName }: GameTableProps) {
 
     const playerNames = new Map(gameState?.players.map(p => [p.id, p.name]) || []);
 
-    // Any player can doubt except the submitter, while there's a submission to doubt
+    // Any active player can doubt except the submitter, while there's a submission to doubt
     const canDoubt = (() => {
         if (!gameState || gameState.phase !== 'PLAY') return false;
         if (!gameState.lastSubmissionPlayerId) return false;
         // Can't doubt your own submission
-        return gameState.lastSubmissionPlayerId !== socket.id;
+        if (gameState.lastSubmissionPlayerId === socket.id) return false;
+        // Can't doubt if you've already finished
+        if (gameState.activePlayers && !gameState.activePlayers.includes(socket.id!)) return false;
+        return true;
     })();
 
     if (!gameState) {
@@ -220,6 +241,21 @@ export function GameTable({ roomId, playerName }: GameTableProps) {
                 </div>
             )}
 
+            {winnerAnnouncement && gameState?.phase !== 'ENDED' && (
+                <div className="winner-announcement-overlay">
+                    <div className="winner-announcement">
+                        <div className="winner-medal">
+                            {winnerAnnouncement.position === 1 ? '🥇' : winnerAnnouncement.position === 2 ? '🥈' : winnerAnnouncement.position === 3 ? '🥉' : `#${winnerAnnouncement.position}`}
+                        </div>
+                        <h2>{winnerAnnouncement.name}</h2>
+                        <p>finished {winnerAnnouncement.position === 1 ? '1st' : winnerAnnouncement.position === 2 ? '2nd' : winnerAnnouncement.position === 3 ? '3rd' : `${winnerAnnouncement.position}th`}!</p>
+                        <button className="continue-button" onClick={() => setWinnerAnnouncement(null)}>
+                            Continue
+                        </button>
+                    </div>
+                </div>
+            )}
+
             <div className="game-header">
                 <h2>Room: {roomId}</h2>
                 <div className="turn-indicator">
@@ -232,17 +268,27 @@ export function GameTable({ roomId, playerName }: GameTableProps) {
             </div>
 
             <div className="players-bar">
-                {gameState.players.map((p, idx) => (
-                    <div
-                        key={p.id}
-                        className={`player-badge ${idx === gameState.currentPlayerIndex ? 'active' : ''} ${p.id === socket.id ? 'you' : ''}`}
-                    >
-                        <span className="player-name">{p.name}</span>
-                        <span className="player-tiles">{p.handSize} tiles</span>
-                        {idx === gameState.currentPlayerIndex && <span className="current-turn">Playing</span>}
-                        {p.hasPassed && <span className="passed">Passed</span>}
-                    </div>
-                ))}
+                {gameState.players.map((p, idx) => {
+                    const finishedPosition = gameState.leaderboard?.indexOf(p.id) ?? -1;
+                    const isFinished = finishedPosition !== -1;
+                    const isActive = gameState.activePlayers?.includes(p.id) ?? true;
+                    return (
+                        <div
+                            key={p.id}
+                            className={`player-badge ${idx === gameState.currentPlayerIndex && isActive ? 'active' : ''} ${p.id === socket.id ? 'you' : ''} ${isFinished ? 'finished' : ''}`}
+                        >
+                            {isFinished && (
+                                <span className="rank-badge">
+                                    {finishedPosition === 0 ? '🥇' : finishedPosition === 1 ? '🥈' : finishedPosition === 2 ? '🥉' : `#${finishedPosition + 1}`}
+                                </span>
+                            )}
+                            <span className="player-name">{p.name}</span>
+                            <span className="player-tiles">{p.handSize} tiles</span>
+                            {idx === gameState.currentPlayerIndex && isActive && <span className="current-turn">Playing</span>}
+                            {p.hasPassed && isActive && <span className="passed">Passed</span>}
+                        </div>
+                    );
+                })}
             </div>
 
             <Board
@@ -279,10 +325,20 @@ export function GameTable({ roomId, playerName }: GameTableProps) {
             {gameState.phase === 'ENDED' && (
                 <div className="game-over-overlay">
                     <div className="game-over-modal">
-                        <h2>🎉 Game Over!</h2>
-                        <p className="winner">
-                            {gameState.players.find(p => p.id === gameState.winner)?.name || 'Unknown'} wins!
-                        </p>
+                        <h2>🔥 Game Over!</h2>
+                        <div className="leaderboard">
+                            <h3>Leaderboard</h3>
+                            {gameState.leaderboard.map((playerId, index) => {
+                                const player = gameState.players.find(p => p.id === playerId);
+                                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`;
+                                return (
+                                    <div key={playerId} className={`leaderboard-entry ${playerId === socket.id ? 'you' : ''}`}>
+                                        <span className="position">{medal}</span>
+                                        <span className="name">{player?.name || 'Unknown'}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
                         <button
                             className="new-game-button"
                             onClick={() => window.location.reload()}
