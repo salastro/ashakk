@@ -4,6 +4,7 @@ import { PlayerHand } from '../components/PlayerHand';
 import { Board } from '../components/Board';
 import { Controls } from '../components/Controls';
 import { PlayerGameState, PublicGameState, Tile, DoubtResolvedEvent, GameEndedEvent } from '../types';
+import { soundManager } from '../utils/sounds';
 import './GameTable.css';
 
 interface GameTableProps {
@@ -16,8 +17,10 @@ export function GameTable({ roomId, playerName }: GameTableProps) {
     const [selectedTiles, setSelectedTiles] = useState<Tile[]>([]);
     const [notification, setNotification] = useState<string | null>(null);
     const [gameStarted, setGameStarted] = useState(false);
+    const [soundEnabled, setSoundEnabled] = useState(true);
     const [winnerAnnouncement, setWinnerAnnouncement] = useState<{ name: string; position: number } | null>(null);
     const prevLeaderboardLength = useRef(0);
+    const prevIsMyTurn = useRef(false);
 
     const showNotification = useCallback((message: string) => {
         setNotification(message);
@@ -63,11 +66,13 @@ export function GameTable({ roomId, playerName }: GameTableProps) {
         socket.on('game:started', () => {
             setGameStarted(true);
             showNotification('Game started!');
+            soundManager.play('gameStart');
         });
 
         socket.on('game:doubtResolved', (event: DoubtResolvedEvent) => {
             const penalty = event.penalty === 'SUBMITTER' ? 'Bluffer caught!' : 'Doubter was wrong!';
             showNotification(penalty);
+            soundManager.play('penalty');
             // needsNumberChoice is now tracked in server state
         });
 
@@ -96,12 +101,32 @@ export function GameTable({ roomId, playerName }: GameTableProps) {
                 const finisherName = gameState.players.find(p => p.id === finisherId)?.name || 'Someone';
                 // Show modal announcement
                 setWinnerAnnouncement({ name: finisherName, position });
+                // Play win sound for the finisher, different sound for others
+                if (finisherId === socket.id) {
+                    soundManager.play('win');
+                } else {
+                    soundManager.play('playerJoin'); // Acknowledge sound for others
+                }
                 // Auto-dismiss after 3 seconds
                 setTimeout(() => setWinnerAnnouncement(null), 3000);
             }
             prevLeaderboardLength.current = gameState.leaderboard.length;
         }
     }, [gameState?.leaderboard, gameState?.players]);
+
+    // Play "your turn" sound when it becomes the player's turn
+    useEffect(() => {
+        if (gameState?.isMyTurn && !prevIsMyTurn.current && gameStarted) {
+            soundManager.play('yourTurn');
+        }
+        prevIsMyTurn.current = gameState?.isMyTurn ?? false;
+    }, [gameState?.isMyTurn, gameStarted]);
+
+    const toggleSound = () => {
+        const newEnabled = !soundEnabled;
+        setSoundEnabled(newEnabled);
+        soundManager.setEnabled(newEnabled);
+    };
 
     const handleTileSelect = (tile: Tile) => {
         setSelectedTiles(prev => {
@@ -133,6 +158,8 @@ export function GameTable({ roomId, playerName }: GameTableProps) {
         socket.emit('turn:play', { roomId, tiles: selectedTiles }, (response: { success: boolean; error?: string }) => {
             if (!response.success) {
                 showNotification(response.error || 'Failed to play tiles');
+            } else {
+                soundManager.play('playTile');
             }
             setSelectedTiles([]);
         });
@@ -143,6 +170,8 @@ export function GameTable({ roomId, playerName }: GameTableProps) {
         socket.emit('turn:submitStarter', { roomId, numberChoice }, (response: { success: boolean; error?: string }) => {
             if (!response.success) {
                 showNotification(response.error || 'Failed to submit starter');
+            } else {
+                soundManager.play('chooseNumber');
             }
         });
     };
@@ -151,6 +180,8 @@ export function GameTable({ roomId, playerName }: GameTableProps) {
         socket.emit('turn:doubt', { roomId }, (response: { success: boolean; error?: string }) => {
             if (!response.success) {
                 showNotification(response.error || 'Failed to doubt');
+            } else {
+                soundManager.play('doubt');
             }
         });
     };
@@ -167,6 +198,8 @@ export function GameTable({ roomId, playerName }: GameTableProps) {
         socket.emit('turn:noTile', { roomId }, (response: { success: boolean; error?: string }) => {
             if (!response.success) {
                 showNotification(response.error || 'Failed to pass');
+            } else {
+                soundManager.play('pass');
             }
         });
     };
@@ -176,6 +209,8 @@ export function GameTable({ roomId, playerName }: GameTableProps) {
         socket.emit('turn:chooseNumber', { roomId, numberChoice: number }, (response: { success: boolean; error?: string }) => {
             if (!response.success) {
                 showNotification(response.error || 'Failed to choose number');
+            } else {
+                soundManager.play('chooseNumber');
             }
             // needsNumberChoice is now tracked in server state
         });
@@ -261,6 +296,9 @@ export function GameTable({ roomId, playerName }: GameTableProps) {
 
             <div className="game-header">
                 <h2>Room: {roomId}</h2>
+                <button className="sound-toggle" onClick={toggleSound} title={soundEnabled ? 'Mute' : 'Unmute'}>
+                    {soundEnabled ? '🔊' : '🔇'}
+                </button>
                 <div className="turn-indicator">
                     {gameState.phase === 'ENDED'
                         ? 'Game Over'
